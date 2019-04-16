@@ -33,7 +33,7 @@ int theater_seats [N_SEAT] = {0};
 int seats_threshold = 0;
 
 pthread_mutex_t operators;
-pthread_mutex_t theater;
+pthread_mutex_t expression_of_interest;
 
 
 typedef struct transaction_info{
@@ -102,9 +102,11 @@ void find_seats (int number_of_seats, TRASACTION_INFO* info){
     int new_threshold = seats_threshold;
     for (i = seats_threshold; i < N_SEAT; i ++){
         /*if seat == 0 (empty), mark it as occupied*/
-        if(!theater_seats[i]){          
+        if(!theater_seats[i]){
+            mutex_handle(&expression_of_interest, FLAG_LOCK);    
             theater_seats[i] = -1;      // -1 = occupied
             info->seats[j++] = i;
+            mutex_handle(&expression_of_interest, FLAG_UNLOCK);
         /*if all the previous seats are sold, we have a new threshold*/
         }else if(theater_seats[i] > 0){
             if (new_threshold == i-1){
