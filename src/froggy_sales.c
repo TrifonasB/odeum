@@ -13,8 +13,10 @@
 #define P_CARDSUCCES 0.9
 #define C_SEAT 20
 
-#define FLAG_ON 1
-#define FLAG_OFF 0
+#define FLAG_INIT 0
+#define FLAG_DESTROY 1
+#define FLAG_LOCK 2
+#define FLAG_UNLOCK 3
 
 int n_cust;
 unsigned int seed;
@@ -38,27 +40,27 @@ typedef struct transaction_info{
     int cost;
 }TRASACTION_INFO;
 
-void mutex_init(pthread_mutex_t* mutex){
-    int rc;
-    rc = pthread_mutex_init(mutex, NULL);
-	if (rc != 0) {	
-            printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nPromblem at mutex init.");
-		exit(-1);
-	}
-}
-
 void mutex_handle(pthread_mutex_t* mutex, int flag){
     int rc;
-    if(flag){
-        //mutex lock
+    if (flag == 0) {//mutex init
+        rc = pthread_mutex_init(mutex, NULL);
+	    if (rc != 0) {
+            printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nPromblem at mutex init.");
+		    exit(-1);
+        }
+	}else if (flag == 1){//mutex destroy
+        rc = pthread_mutex_destroy(&operators);
+	    if (rc != 0) {
+            printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe mutex survived.");
+      	    exit(-1);
+        }
+    }else if (flag == 2){//mutex lock
         rc = pthread_mutex_lock (mutex);
         if (rc != 0) {	
             printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe rise of the Mutex.");
             pthread_exit(&rc);
         }
-    }
-    else{
-        //mutex unlock
+    }else{//mutex unlock
         rc = pthread_mutex_unlock(mutex);
         if (rc != 0) {	
             printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe fall of the Mutex.");
@@ -68,7 +70,7 @@ void mutex_handle(pthread_mutex_t* mutex, int flag){
 } 
 
 void wait_operator(TRASACTION_INFO* info) {
-    mutex_handle(&operators, FLAG_ON);
+    mutex_handle(&operators, FLAG_LOCK);
     while(1){
         if(available_operators){
             available_operators--;
@@ -78,7 +80,7 @@ void wait_operator(TRASACTION_INFO* info) {
             sleep(1);
         }
     }
-    mutex_handle(&operators, FLAG_OFF);
+    mutex_handle(&operators, FLAG_UNLOCK);
 }
 
 int request_seats_from_client(){
@@ -97,10 +99,9 @@ void* transaction (void* clientID){
     printf("Client #%d just called. \n", *tid);
 
     TRASACTION_INFO* info;
-    struct timespec req_start, req_end;
 
-    //init clock
-    //clock_gettime(CLOCK_REALTIME, &req_start);
+    struct timespec req_start, req_end;
+    clock_gettime( CLOCK_MONOTONIC, &req_start);
     
     //Await available operator
     wait_operator(info);
@@ -116,9 +117,7 @@ void* transaction (void* clientID){
     pthread_exit (clientID);
 }
 
-
-int main (int argc, char* argv[]){
-    
+void arguments_check(int argc, char* argv[]){
     if (argc != 3){
         printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nGive 2 arguments.");
         exit (-1);
@@ -129,6 +128,11 @@ int main (int argc, char* argv[]){
         printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe number of customers must be positive.");
         exit (-1);
     }
+}
+
+int main (int argc, char* argv[]){
+     
+    arguments_check(argc, argv);
 
     //thread memory
     int rc;
@@ -142,14 +146,15 @@ int main (int argc, char* argv[]){
     }
 
     //mutex initialization
-    mutex_init(&operators);
-    mutex_init(&theater);
+    mutex_handle(&operators, FLAG_INIT);
+    mutex_handle(&theater, FLAG_INIT);
 
     //thread loop
     int i;
     for (i = 0; i < n_cust; i++){
         clientCount[i] = i + 1;
         //printf("Client #%d just called. \n", clientCount[i]);
+
         rc = pthread_create(&clients[i], NULL, transaction, &clientCount[i]);
         if (rc != 0){
             printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nPromblem at thread creation.");
@@ -167,11 +172,6 @@ int main (int argc, char* argv[]){
         }
     }
 
-    rc = pthread_mutex_destroy(&operators);
-	if (rc != 0) {
-            printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe mutex survived.");
-      		exit(-1);
-	}
 
     return 0;
 }
