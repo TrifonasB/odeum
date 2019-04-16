@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 
+//#define __USE_POSIX199309 
 #define N_SEAT 250
 #define N_TEL 8
 #define N_SEATLOW 1
@@ -29,6 +30,7 @@ int sum_transaction_time = 0;
 int sum_waiting_time = 0;
 
 int theater_seats [N_SEAT] = {0};
+int seats_threshold = 0;
 
 pthread_mutex_t operators;
 pthread_mutex_t theater;
@@ -94,6 +96,31 @@ int request_seats_from_client(){
     return seats;
 }
 
+void find_seats (int number_of_seats, TRASACTION_INFO* info){
+    int i;
+    int j = 0;
+    int new_threshold = seats_threshold;
+    for (i = seats_threshold; i < N_SEAT; i ++){
+        /*if seat == 0 (empty), mark it as occupied*/
+        if(!theater_seats[i]){          
+            theater_seats[i] = -1;      // -1 = occupied
+            info->seats[j++] = i;
+        /*if all the previous seats are sold, we have a new threshold*/
+        }else if(theater_seats[i] > 0){
+            if (new_threshold == i-1){
+                new_threshold = i;
+            }
+        if (j == number_of_seats){
+            break;
+        }
+    }
+    if (j < number_of_seats){
+        /* not enough seats available */
+    }
+    seats_threshold = new_threshold;   
+    //should we dump the array?
+}
+
 void* transaction (void* clientID){
     int* tid = (int*) clientID;
     printf("Client #%d just called. \n", *tid);
@@ -101,16 +128,16 @@ void* transaction (void* clientID){
     TRASACTION_INFO* info;
 
     struct timespec req_start, req_end;
-    clock_gettime( CLOCK_MONOTONIC, &req_start);
+    clock_gettime( CLOCK_REALTIME, &req_start);
+    clock_gettime( 0, &req_start);
     
     //Await available operator
     wait_operator(info);
-    int seats;
-    seats = request_seats_from_client();
-
-    printf("So you want #%d seats..hmm let me check..", seats);
+    int requested_seats = request_seats_from_client();
+    printf("So you want #%d seats..hmm let me check..", requested_seats);
     
     //check seats availability in theater
+    find_seats(requested_seats, info);
     //pay
     //update mean values    
 
