@@ -13,12 +13,23 @@
 #define P_CARDSUCCES 0.9
 #define C_SEAT 20
 
+#define FLAG_ON 1
+#define FLAG_OFF 0
+
+int n_cust;
+unsigned int seed;
+
 int account_remain = 0;
-int sum_transactions = 0;
 int available_operators = N_TEL;
-int* theater_seats [N_SEAT];
+
+int sum_transactions = 0;
+int sum_transaction_time = 0;
+int sum_waiting_time = 0;
+
+int theater_seats [N_SEAT] = {0};
+
 pthread_mutex_t operators;
-//pthread_mutex_t 
+pthread_mutex_t theater;
 
 
 typedef struct transaction_info{
@@ -27,25 +38,37 @@ typedef struct transaction_info{
     int cost;
 }TRASACTION_INFO;
 
-
-void* transaction (void* clientID){
-
-    int* tid = (int*) clientID;
-
-    printf("Client #%d just called. \n", *tid);
-
-    TRASACTION_INFO* info;
+void mutex_init(pthread_mutex_t* mutex){
     int rc;
-    struct timespec req_start, req_end;
-    //clock_gettime(CLOCK_REALTIME, &req_start);
-
-    
-    //mutex lock
-    rc = pthread_mutex_lock (&operators);
-    if (rc != 0) {	
-        printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe rise of the Mutex.");
-		pthread_exit(&rc);
+    rc = pthread_mutex_init(mutex, NULL);
+	if (rc != 0) {	
+            printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nPromblem at mutex init.");
+		exit(-1);
 	}
+}
+
+void mutex_handle(pthread_mutex_t* mutex, int flag){
+    int rc;
+    if(flag){
+        //mutex lock
+        rc = pthread_mutex_lock (mutex);
+        if (rc != 0) {	
+            printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe rise of the Mutex.");
+            pthread_exit(&rc);
+        }
+    }
+    else{
+        //mutex unlock
+        rc = pthread_mutex_unlock(mutex);
+        if (rc != 0) {	
+            printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe fall of the Mutex.");
+            pthread_exit(&rc);
+        }
+    }
+} 
+
+void wait_operator(TRASACTION_INFO* info) {
+    mutex_handle(&operators, FLAG_ON);
     while(1){
         if(available_operators){
             available_operators--;
@@ -55,21 +78,47 @@ void* transaction (void* clientID){
             sleep(1);
         }
     }
-    //mutex unlock
-    rc = pthread_mutex_unlock(&operators);
-	if (rc != 0) {	
-        printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe fall of the Mutex.");
-		pthread_exit(&rc);
-	}
+    mutex_handle(&operators, FLAG_OFF);
+}
+
+int request_seats_from_client(){
+    int seats;
+
+    printf("Welcome to Lucas Film Theater! \nYou can pick from #%d to #%d. \nHow many seats do you want? ", N_SEATLOW, N_SEATHIGH);
+    seats = rand_r(&seed) % (N_SEATHIGH + 1);
+    if(seats < N_SEATLOW)
+        seats = N_SEATLOW;
+    
+    return seats;
+}
+
+void* transaction (void* clientID){
+    int* tid = (int*) clientID;
+    printf("Client #%d just called. \n", *tid);
+
+    TRASACTION_INFO* info;
+    struct timespec req_start, req_end;
+
+    //init clock
+    //clock_gettime(CLOCK_REALTIME, &req_start);
+    
+    //Await available operator
+    wait_operator(info);
+    int seats;
+    seats = request_seats_from_client();
+
+    printf("So you want #%d seats..hmm let me check..", seats);
+    
+    //check seats availability in theater
+    //pay
+    //update mean values    
 
     pthread_exit (clientID);
 }
 
 
 int main (int argc, char* argv[]){
-
-    int n_cust;
-    unsigned int seed;
+    
     if (argc != 3){
         printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nGive 2 arguments.");
         exit (-1);
@@ -93,11 +142,8 @@ int main (int argc, char* argv[]){
     }
 
     //mutex initialization
-    rc = pthread_mutex_init(&operators, NULL);
-	if (rc != 0) {	
-            printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nPromblem at mutex init.");
-		exit(-1);
-	}
+    mutex_init(&operators);
+    mutex_init(&theater);
 
     //thread loop
     int i;
