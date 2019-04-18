@@ -47,7 +47,7 @@ pthread_mutex_t seats_availability;
 
 typedef struct transaction_info{
     int transaction_no;
-    int* seats[N_SEATHIGH];
+    int seats[N_SEATHIGH];
     int requested_seats;
     int cost;
 }TRASACTION_INFO;
@@ -143,7 +143,7 @@ int find_seats (TRASACTION_INFO* info){
         /*If not enough seats are found then free those which are found*/
         mutex_handle(&expression_of_interest, FLAG_LOCK); 
         for(i = 0; i < j; i ++){
-            theater_seats[*info->seats[i]] = SEAT_EMPTY;
+            theater_seats[info->seats[i]] = SEAT_EMPTY;
         }
         mutex_handle(&expression_of_interest, FLAG_UNLOCK);
         return FAIL;
@@ -167,15 +167,15 @@ void change_seats_state (int new_state, TRASACTION_INFO* info){
     mutex_handle(&expression_of_interest, FLAG_LOCK);
     for(int i = 0; i < info->requested_seats; i++)
     {
-        theater_seats[*info->seats[i]] = new_state;
+        theater_seats[info->seats[i]] = new_state;
     }
     mutex_handle(&expression_of_interest, FLAG_LOCK);
 }
 
 void change_seats_availability (TRASACTION_INFO* info){
-    mutex_handle(&available_seats, FLAG_LOCK);
+    mutex_handle(&seats_availability, FLAG_LOCK);
     available_seats -= info->requested_seats;
-    mutex_handle(&available_seats, FLAG_LOCK);
+    mutex_handle(&seats_availability, FLAG_LOCK);
 }
 
 void* transaction (void* clientID){
@@ -207,7 +207,7 @@ void* transaction (void* clientID){
             printf("\nClient #%d:: We successfully found the following seats:", *tid);
             for(i = 0; i < info->requested_seats; i++)
             {
-                printf("\nClient #%d:: No. %d. ", *tid, *info->seats[i]);
+                printf("\nClient #%d:: No. %d. ", *tid, info->seats[i]);
             }
 
             printf("\nClient #%d:: Transaction Cost: %d", *tid, info->cost);
@@ -221,7 +221,7 @@ void* transaction (void* clientID){
                 printf("\nClient #%d:: Amount Paid: %d", *tid, info->cost);
                 for(i = 0; i < info->requested_seats; i++)
                 {
-                    printf("\nClient #%d:: Booked Seat No. %d", *tid, *info->seats[i]);
+                    printf("\nClient #%d:: Booked Seat No. %d", *tid, info->seats[i]);
                 }
             }
             else {
@@ -244,13 +244,13 @@ void* transaction (void* clientID){
 
 void arguments_check(int argc, char* argv[]){
     if (argc != 3){
-        printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nGive 2 arguments.");
+        printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nGive 2 arguments.\n");
         exit (-1);
     }
     n_cust = atoi(argv[1]);
     seed = abs(atoi(argv[2]));
     if(n_cust < 0){
-        printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe number of customers must be positive.");
+        printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe number of customers must be positive.\n");
         exit (-1);
     }
 }
@@ -316,7 +316,7 @@ int main (int argc, char* argv[]){
     
 
     //remove memory leaks
-    realloc(clients, 0);
+    free(clients);
     mutex_handle(&operators, FLAG_DESTROY);
     mutex_handle(&expression_of_interest, FLAG_DESTROY);
     mutex_handle(&payment, FLAG_DESTROY);
