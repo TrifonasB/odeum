@@ -73,7 +73,7 @@ void condition_handle (pthread_cond_t* cond, int flag){
 
 }
 
-int rand_prob(float percent, int min, int max){
+int rand_prob(float percent){
     int r  = rand();
     if(r < RAND_MAX * percent)
         return SUCCESS;
@@ -149,7 +149,7 @@ int find_seats (TRANSACTION_INFO* info){
 }
 
 int pay_seats(int amount) {
-    int res = rand_prob(0.9F, 0, 1);
+    int res = rand_prob(0.9F);
     if(res == SUCCESS){
         mutex_handle(&payment, FLAG_LOCK);
         account_remain += amount;
@@ -165,13 +165,11 @@ void change_seats_state (int new_state, TRANSACTION_INFO* info){
     {
         theater_seats[info->seats[i]] = new_state;
     }
+    if(new_state != SEAT_EMPTY){
+        available_seats -= info->requested_seats;
+    }
+    
     mutex_handle(&expression_of_interest, FLAG_UNLOCK);
-}
-
-void change_seats_availability (TRANSACTION_INFO* info){
-    mutex_handle(&seats_availability, FLAG_LOCK);
-    available_seats -= info->requested_seats;
-    mutex_handle(&seats_availability, FLAG_LOCK);
 }
 
 void* transaction (void* clientID){

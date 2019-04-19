@@ -31,7 +31,7 @@ void mutex_handle(pthread_mutex_t* mutex, int flag);
 
 void condition_handle (pthread_cond_t* cond, int flag);
 
-int rand_prob(float percent, int min, int max);
+int rand_prob(float percent);
 
 void wait_operator(TRANSACTION_INFO* info);
 
@@ -42,8 +42,6 @@ int find_seats (TRANSACTION_INFO* info);
 int pay_seats(int amount);
 
 void change_seats_state (int new_state, TRANSACTION_INFO* info);
-
-void change_seats_availability (TRANSACTION_INFO* info);
 
 void* transaction (void* clientID);
 
