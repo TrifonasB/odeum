@@ -22,7 +22,6 @@ int seats_threshold = 0;
 pthread_mutex_t operators;
 pthread_mutex_t expression_of_interest;
 pthread_mutex_t payment;
-pthread_mutex_t seats_availability;
 pthread_cond_t condition;
 
 void mutex_handle(pthread_mutex_t* mutex, int flag){
@@ -274,7 +273,6 @@ int main (int argc, char* argv[]){
     mutex_handle(&operators, FLAG_INIT);
     mutex_handle(&expression_of_interest, FLAG_INIT);
     mutex_handle(&payment, FLAG_INIT);
-    mutex_handle(&seats_availability, FLAG_INIT);
     condition_handle(&condition, FLAG_INIT);
 
     //thread loop
@@ -320,7 +318,6 @@ int main (int argc, char* argv[]){
     mutex_handle(&operators, FLAG_DESTROY);
     mutex_handle(&expression_of_interest, FLAG_DESTROY);
     mutex_handle(&payment, FLAG_DESTROY);
-    mutex_handle(&seats_availability, FLAG_DESTROY);
     condition_handle(&condition, FLAG_DESTROY);
 
     return 0;
