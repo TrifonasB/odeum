@@ -9,7 +9,8 @@ int n_cust;
 unsigned int seed;
 
 int account_remain = 0;
-int available_operators = N_TEL;
+int available_cashiers = N_TEL;
+int available_operators = N_CASH;
 
 int sum_transactions = 0;
 int sum_transaction_time = 0;
@@ -22,7 +23,10 @@ int seats_threshold = 0;
 pthread_mutex_t operators;
 pthread_mutex_t expression_of_interest;
 pthread_mutex_t payment;
-pthread_cond_t condition;
+pthread_mutex_t cashiers;
+
+pthread_cond_t condition_op;
+pthread_cond_t condition_cash;
 
 void mutex_handle(pthread_mutex_t* mutex, int flag){
     int rc;
@@ -57,13 +61,13 @@ void condition_handle (pthread_cond_t* cond, int flag){
 
     int rc;
     if (flag == FLAG_INIT){
-        rc = pthread_cond_init(&condition, NULL);
+        rc = pthread_cond_init(cond, NULL);
         if (rc != 0) {
             printf("ERROR: return code from pthread_cond_init() is %d\n", rc);
             exit(-1);
 	    }
     }else if (flag == FLAG_DESTROY){
-        rc = pthread_cond_destroy(&condition);
+        rc = pthread_cond_destroy(cond);
 	    if (rc != 0) {
     		printf("ERROR: return code from pthread_cond_destroy() is %d\n", rc);
        		exit(-1);
@@ -80,29 +84,70 @@ int rand_prob(float percent){
         return FAIL;
 }
 
-void wait_operator(TRANSACTION_INFO* info) {
-    mutex_handle(&operators, FLAG_LOCK);
-    while(1){
-        if(available_operators){
-            available_operators--;
-            (*info).transaction_no = ++sum_transactions;
-            break;
-        }else{
-            pthread_cond_wait(&condition, &operators);
+void handle_operator(TRANSACTION_INFO* info, int flag) {
+    if(flag == FLAG_LOCK){
+        mutex_handle(&operators, FLAG_LOCK);
+        while(1){
+            if(available_operators){
+                available_operators--;
+                (*info).transaction_no = sum_transactions++;
+                break;
+            }else{
+                pthread_cond_wait(&condition_op, &operators);
+            }
         }
+        mutex_handle(&operators, FLAG_UNLOCK);
     }
-    mutex_handle(&operators, FLAG_UNLOCK);
+    else if (flag == FLAG_UNLOCK) {
+        mutex_handle(&operators, FLAG_LOCK);
+        available_operators++;
+        mutex_handle(&operators, FLAG_UNLOCK);
+        pthread_cond_broadcast(&condition_op);
+    }
+    
+}
+
+void handle_cashier(int flag) {
+    if(flag == FLAG_LOCK){
+        mutex_handle(&cashiers, FLAG_LOCK);
+        while(1){
+            if(available_cashiers){
+                available_cashiers--;
+                break;
+            }else{
+                pthread_cond_wait(&condition_cash, &cashiers);
+            }
+        }
+        mutex_handle(&cashiers, FLAG_UNLOCK);
+    }
+    else if (flag == FLAG_UNLOCK) {
+        mutex_handle(&cashiers, FLAG_LOCK);
+        available_cashiers++;
+        mutex_handle(&cashiers, FLAG_UNLOCK);
+        pthread_cond_broadcast(&condition_cash);
+    }
 }
 
 int request_seats(int* clientID){
     int seats;
-
     printf("\nCLient #%d:: Welcome to Lucas Film Theater! \nYou can pick from #%d to #%d. \nHow many seats do you want? ", *clientID, N_SEATLOW, N_SEATHIGH);
     seats = rand_r(&seed) % (N_SEATHIGH + 1);
     if(seats < N_SEATLOW)
         seats = N_SEATLOW;
     
     return seats;
+}
+
+int request_zone(int* clientID){
+    int prob;
+    printf("\nCLient #%d:: Which zone would you like your seats in A,B or C? ", *clientID);
+    prob = rand_r(&seed) % (100);
+    if(prob < P_ZONE_A * 100)
+        return ZONE_A;
+    else if(prob < (P_ZONE_A + P_ZONE_B) * 100)
+        return ZONE_B;
+    else
+        return ZONE_C;
 }
 
 int find_seats (TRANSACTION_INFO* info){
@@ -182,9 +227,9 @@ void* transaction (void* clientID){
     /*We used 0 instead of CLOCK_REALTIME since our vm wouldn't recognise this constant. The definition of the time.h library,
     defines CLOCK_REALTIME as 0 only if a specific version of POSIX is defined. We were unable to figuer out how to do that step,
     so we just ussed the raw value.*/
-    clock_gettime( 0, &req_start);
+    clock_gettime(0, &req_start);
 
-    wait_operator(&info);
+    handle_operator(&info, FLAG_LOCK);
 
     clock_gettime( 0, &req_end);
 
@@ -193,6 +238,7 @@ void* transaction (void* clientID){
     }
     else{
         info.requested_seats = request_seats(tid);
+        info.requested_zone = request_zone(tid);
         printf("\nClient #%d:: So you want #%d seats..hmm let me check..", *tid, info.requested_seats);
         
         //check seats availability in theater
@@ -204,28 +250,44 @@ void* transaction (void* clientID){
                 printf("\nClient #%d:: No. %d. ", *tid, info.seats[i]);
             }
             
-            info.cost = info.requested_seats * C_SEAT;
-            printf("\nClient #%d:: Transaction Cost: %d", *tid, info.cost);
-            res = pay_seats(info.cost);
-            if(res == SUCCESS){
-                change_seats_state(*tid, &info);
+            if(info.requested_zone == ZONE_A)
+                info.cost = info.requested_seats * C_ZONE_A;
+            else if(info.requested_zone == ZONE_A)
+                info.cost = info.requested_seats * C_ZONE_B;
+            else
+                info.cost = info.requested_seats * C_ZONE_C;
 
-                printf("\nClient #%d:: You booked %d seats successfull! Enjoy the play!", *tid, info.requested_seats);
-                printf("\nClient #%d:: Transaction ID: %d", *tid, info.transaction_no);
-                printf("\nClient #%d:: Amount Paid: %d", *tid, info.cost);
-                for(i = 0; i < info.requested_seats; i++)
-                {
-                    printf("\nClient #%d:: Booked Seat No. %d", *tid, info.seats[i]);
-                }
-            }
-            else {
-                change_seats_state(SEAT_EMPTY, &info);
-                printf("\nClient #%d:: Sorry, your payment wasn't successfull. Your booking is canceled", *tid);
-            }
+            printf("\nClient #%d:: I'm now transfering you to mr Varoufakis. Thank you and I hope you enjoy the play.", *tid);
+            
         }
         else {
             printf("\nClient #%d:: Sorry can't proceed with your booking because theater doesn't have enough seats", *tid);
         }
+    }
+
+    handle_operator(&info, FLAG_UNLOCK);
+
+    if(res == SUCCESS){
+        handle_cashier(FLAG_LOCK);
+
+        printf("\nClient #%d:: Transaction Cost: %d", *tid, info.cost);
+        res = pay_seats(info.cost);
+        if(res == SUCCESS){
+            change_seats_state(*tid, &info);
+
+            printf("\nClient #%d:: You booked %d seats successfull! Enjoy the play!", *tid, info.requested_seats);
+            printf("\nClient #%d:: Transaction ID: %d", *tid, info.transaction_no);
+            printf("\nClient #%d:: Amount Paid: %d", *tid, info.cost);
+            for(i = 0; i < info.requested_seats; i++)
+            {
+                printf("\nClient #%d:: Booked Seat No. %d", *tid, info.seats[i]);
+            }
+        }
+        else {
+            change_seats_state(SEAT_EMPTY, &info);
+            printf("\nClient #%d:: Sorry, your payment wasn't successfull. Your booking is canceled", *tid);
+        }
+        handle_cashier(FLAG_UNLOCK);
     }
     
     clock_gettime( 0, &trans_end);
@@ -233,11 +295,7 @@ void* transaction (void* clientID){
     sum_waiting_time += req_end.tv_sec - req_start.tv_sec;
     sum_transaction_time += trans_end.tv_sec - req_start.tv_sec;
 
-    mutex_handle(&operators, FLAG_LOCK);
-    available_operators++;
-    mutex_handle(&operators, FLAG_UNLOCK);
 
-    pthread_cond_broadcast(&condition);
     pthread_exit (clientID);
 }
 
@@ -273,7 +331,9 @@ int main (int argc, char* argv[]){
     mutex_handle(&operators, FLAG_INIT);
     mutex_handle(&expression_of_interest, FLAG_INIT);
     mutex_handle(&payment, FLAG_INIT);
-    condition_handle(&condition, FLAG_INIT);
+    mutex_handle(&cashiers, FLAG_INIT);
+    condition_handle(&condition_op, FLAG_INIT);
+    condition_handle(&condition_cash, FLAG_INIT);
 
     //thread loop
     int i;
@@ -311,6 +371,7 @@ int main (int argc, char* argv[]){
         else
             printf("\n --Seat No. %d / Empty", i + 1);            
     }
+    printf("\n");
     
 
     //remove memory leaks
@@ -318,7 +379,9 @@ int main (int argc, char* argv[]){
     mutex_handle(&operators, FLAG_DESTROY);
     mutex_handle(&expression_of_interest, FLAG_DESTROY);
     mutex_handle(&payment, FLAG_DESTROY);
-    condition_handle(&condition, FLAG_DESTROY);
+    mutex_handle(&cashiers, FLAG_DESTROY);
+    condition_handle(&condition_op, FLAG_DESTROY);
+    condition_handle(&condition_cash, FLAG_DESTROY);
 
     return 0;
 }
