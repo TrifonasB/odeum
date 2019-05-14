@@ -9,8 +9,8 @@ int n_cust;
 unsigned int seed;
 
 int account_remain = 0;
-int available_cashiers = N_TEL;
-int available_operators = N_CASH;
+int available_cashiers = N_CASH;
+int available_operators = N_TEL;
 
 int sum_transactions = 0;
 int sum_transaction_time = 0;
@@ -39,7 +39,7 @@ void mutex_handle(pthread_mutex_t* mutex, int flag){
 		    exit(-1);
         }
 	}else if (flag == FLAG_DESTROY){
-        rc = pthread_mutex_destroy(&operators);
+        rc = pthread_mutex_destroy(mutex);
 	    if (rc != 0) {
             printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nThe mutex survived.");
       	    exit(-1);
@@ -132,7 +132,7 @@ void handle_cashier(int flag) {
 
 int request_seats(int* clientID){
     int seats;
-    printf("\nCLient #%d:: Welcome to Lucas Film Theater! \nYou can pick from #%d to #%d. \nHow many seats do you want? ", *clientID, N_SEATLOW, N_SEATHIGH);
+    printf("\nCLient #%d:: Welcome to Lucas Film Theater! \nYou can pick from #%d to #%d. \nHow many seats do you want? ", clientID, N_SEATLOW, N_SEATHIGH);
     seats = rand_r(&seed) % (N_SEATHIGH + 1);
     if(seats < N_SEATLOW)
         seats = N_SEATLOW;
@@ -142,14 +142,20 @@ int request_seats(int* clientID){
 
 int request_zone(int* clientID){
     int prob;
-    printf("\nCLient #%d:: Which zone would you like your seats in A,B or C? ", *clientID);
+    printf("\nCLient #%d:: Which zone would you like your seats in A,B or C? ", clientID);
     prob = rand_r(&seed) % (100);
-    if(prob < P_ZONE_A * 100)
+    if(prob < P_ZONE_A * 100){
+        printf("\nClient #%d: SO it's Zone A. Great pick!", clientID);
         return ZONE_A;
-    else if(prob < (P_ZONE_A + P_ZONE_B) * 100)
+    }
+    else if(prob < (P_ZONE_A + P_ZONE_B) * 100){
+        printf("\nClient #%d: SO it's Zone B. OK pick!", clientID);
         return ZONE_B;
-    else
+    }
+    else{
+        printf("\nClient #%d: SO it's Zone C. Thanks!", clientID);
         return ZONE_C;
+    }
 }
 
 int find_seats (TRANSACTION_INFO* info){
@@ -266,7 +272,10 @@ int handle_seats(int* clientID, TRANSACTION_INFO* info) {
         {
             printf("\nClient #%d:: No. %d. ", clientID, info->seats[i]);
         }
-        printf("\nClient #%d:: I'm now transfering you to mr Varoufakis. Thank you and I hope you enjoy the play.", clientID);
+        printf("\nClient #%d::Done", clientID);
+
+        printf("\nClient #%d:: I'm now transfering you to mr Varoufakis department.", clientID);
+        fflush(stdout);
     }
     else {
         printf("\nClient #%d:: Sorry can't proceed with your booking because theater doesn't have enough seats", clientID);
@@ -280,15 +289,20 @@ void cashier_transaction(int* clientID, TRANSACTION_INFO* info) {
 
     handle_cashier(FLAG_LOCK);
 
-    if(info->requested_zone == ZONE_A)
+    if(info->requested_zone == ZONE_A){
         info->cost = info->requested_seats * C_ZONE_A;
-    else if(info->requested_zone == ZONE_B)
+    }
+    else if(info->requested_zone == ZONE_B){
         info->cost = info->requested_seats * C_ZONE_B;
-    else
+    }
+    else{
         info->cost = info->requested_seats * C_ZONE_C;
+    }
 
     printf("\nClient #%d:: Transaction Cost: %d", clientID, info->cost);
+    fflush(stdout);
     int res = pay_seats(info->cost);
+
     if(res == SUCCESS){
         change_seats_state(clientID, info);
 
@@ -326,7 +340,7 @@ void* transaction (void* clientID){
     if(available_seats == 0){
         printf("\nClient #%d:: Sorry but the theater is full...", *tid);
     }
-    else{
+    else {
         res = handle_seats(*tid, &info);
     }
 
