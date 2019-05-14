@@ -158,22 +158,25 @@ int find_seats (TRANSACTION_INFO* info){
         waiting = T_SEATLOW;
     
     sleep(waiting); //pretend operator is looking
+
     int i, i_in, start, end, j = 0;
+
     if(info->requested_zone == ZONE_A)
     {
         start = 0; 
-        end = N_ZONE_A;
+        end = N_ZONE_A * N_SEAT;
     }
     else if(info->requested_zone == ZONE_B)
     {
-        start = N_ZONE_A; 
-        end = N_ZONE_A + N_ZONE_B;
+        start = N_ZONE_A * N_SEAT; 
+        end = (N_ZONE_A + N_ZONE_B) * N_SEAT;
     }
     else {
-        start = N_ZONE_A + N_ZONE_B; 
-        end = N_ZONE_A + N_ZONE_B + N_ZONE_C;
+        start = (N_ZONE_A + N_ZONE_B) * N_SEAT; 
+        end = (N_ZONE_A + N_ZONE_B + N_ZONE_C) * N_SEAT;
     }
-    for (i = start; i < end - info->requested_seats + 1; i= i_in + 1)
+
+    for (i = start; i < end - info->requested_seats + 1; i = i_in + 1)
     {
         mutex_handle(&expression_of_interest, FLAG_LOCK);
         if(theater_seats[i] == SEAT_EMPTY) {
@@ -274,7 +277,7 @@ int handle_seats(int* clientID, TRANSACTION_INFO* info) {
 }
 
 void cashier_transaction(int* clientID, TRANSACTION_INFO* info) {
-    
+
     handle_cashier(FLAG_LOCK);
 
     if(info->requested_zone == ZONE_A)
