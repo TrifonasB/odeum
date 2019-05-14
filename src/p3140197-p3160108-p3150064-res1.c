@@ -18,7 +18,9 @@ int sum_waiting_time = 0;
 
 int theater_seats [N_SEAT] = {0};
 int available_seats = N_SEAT;
-int seats_threshold = 0;
+int a_threshold = 0;
+int b_threshold = 0;
+int c_threshold = 0;
 
 pthread_mutex_t operators;
 pthread_mutex_t expression_of_interest;
@@ -156,40 +158,72 @@ int find_seats (TRANSACTION_INFO* info){
         waiting = T_SEATLOW;
     
     sleep(waiting); //pretend operator is looking
-    int i;
-    int j = 0;
-    int new_threshold = seats_threshold;
-    for (i = seats_threshold; i < N_SEAT; i ++){
-        /*if seat == 0 (empty), mark it as occupied*/
-        if(theater_seats[i] == SEAT_EMPTY){
-            mutex_handle(&expression_of_interest, FLAG_LOCK);    
-            if(theater_seats[i] != 0)
-                continue;
-            theater_seats[i] = SEAT_OCCUPIED;
-            info->seats[j++] = i;
-            mutex_handle(&expression_of_interest, FLAG_UNLOCK);
-        /*if all the previous seats are sold, we have a new threshold*/
-        }
-        else if(theater_seats[i] > 0){
-            if (new_threshold == i-1){
-                new_threshold = i;
+    int i, i_in, start, end, j = 0;
+    if(info->requested_zone == ZONE_A)
+    {
+        start = 0; 
+        end = N_ZONE_A;
+    }
+    else if(info->requested_zone == ZONE_B)
+    {
+        start = N_ZONE_A; 
+        end = N_ZONE_A + N_ZONE_B;
+    }
+    else {
+        start = N_ZONE_A + N_ZONE_B; 
+        end = N_ZONE_A + N_ZONE_B + N_ZONE_C;
+    }
+    for (i = start; i < end - info->requested_seats + 1; i= i_in + 1)
+    {
+        mutex_handle(&expression_of_interest, FLAG_LOCK);
+        if(theater_seats[i] == SEAT_EMPTY) {
+            j = 0;
+            for (i_in = i; i_in < i + info->requested_seats; i_in++)
+            {
+                if(theater_seats[i_in] != SEAT_EMPTY)
+                    break;
+                theater_seats[i_in] = SEAT_OCCUPIED;
+                info->seats[j++] = i_in;
+            }
+            if(j!= info->requested_seats){
+                for (i_in = i; i_in < i + j - 1; i_in++)
+                {
+                    theater_seats[i_in] = SEAT_EMPTY;
+                }
             }
         }
-        if (j == info->requested_seats){
-            break;
-        }
-    }
-    if (j < info->requested_seats){
-        /*If not enough seats are found then free those which are found*/
-        mutex_handle(&expression_of_interest, FLAG_LOCK); 
-        for(i = 0; i < j; i ++){
-            theater_seats[info->seats[i]] = SEAT_EMPTY;
-        }
         mutex_handle(&expression_of_interest, FLAG_UNLOCK);
-        return FAIL;
+        if(j== info->requested_seats)
+            break;
     }
-    seats_threshold = new_threshold;
-    return SUCCESS;
+    
+    if (j < info->requested_seats)
+        return FAIL;
+    else
+        return SUCCESS;
+
+    //for (i = seats_threshold; i < N_SEAT; i ++){
+
+        /*if seat == 0 (empty), mark it as occupied*/
+        // if(theater_seats[i] == SEAT_EMPTY){
+        //     mutex_handle(&expression_of_interest, FLAG_LOCK);    
+        //     if(theater_seats[i] != 0)
+        //         continue;
+        //     theater_seats[i] = SEAT_OCCUPIED;
+        //     info->seats[j++] = i;
+        //     mutex_handle(&expression_of_interest, FLAG_UNLOCK);
+        // /*if all the previous seats are sold, we have a new threshold*/
+        // }
+        // else if(theater_seats[i] > 0){
+        //     if (new_threshold == i-1){
+        //         new_threshold = i;
+        //     }
+        // }
+        // if (j == info->requested_seats){
+        //     break;
+        // }
+    //}
+    
 }
 
 int pay_seats(int amount) {
@@ -216,78 +250,87 @@ void change_seats_state (int new_state, TRANSACTION_INFO* info){
     mutex_handle(&expression_of_interest, FLAG_UNLOCK);
 }
 
+int handle_seats(int* clientID, TRANSACTION_INFO* info) {
+    info->requested_seats = request_seats(clientID);
+    info->requested_zone = request_zone(clientID);
+    printf("\nClient #%d:: So you want #%d seats..hmm let me check..", clientID, info->requested_seats);
+    
+    //check seats availability in theater
+    int res = find_seats(info);
+    if(res == SUCCESS){
+        printf("\nClient #%d:: We successfully found the following seats:", clientID);
+        for(int i = 0; i < info->requested_seats; i++)
+        {
+            printf("\nClient #%d:: No. %d. ", clientID, info->seats[i]);
+        }
+        printf("\nClient #%d:: I'm now transfering you to mr Varoufakis. Thank you and I hope you enjoy the play.", clientID);
+    }
+    else {
+        printf("\nClient #%d:: Sorry can't proceed with your booking because theater doesn't have enough seats", clientID);
+        return FAIL;
+    }
+
+    return SUCCESS;
+}
+
+void cashier_transaction(int* clientID, TRANSACTION_INFO* info) {
+    
+    handle_cashier(FLAG_LOCK);
+
+    if(info->requested_zone == ZONE_A)
+        info->cost = info->requested_seats * C_ZONE_A;
+    else if(info->requested_zone == ZONE_B)
+        info->cost = info->requested_seats * C_ZONE_B;
+    else
+        info->cost = info->requested_seats * C_ZONE_C;
+
+    printf("\nClient #%d:: Transaction Cost: %d", clientID, info->cost);
+    int res = pay_seats(info->cost);
+    if(res == SUCCESS){
+        change_seats_state(clientID, info);
+
+        printf("\nClient #%d:: You booked %d seats successfull! Enjoy the play!", clientID, info->requested_seats);
+        printf("\nClient #%d:: Transaction ID: %d", clientID, info->transaction_no);
+        printf("\nClient #%d:: Amount Paid: %d", clientID, info->cost);
+        for(int i = 0; i < info->requested_seats; i++)
+        {
+            printf("\nClient #%d:: Booked Seat No. %d", clientID, info->seats[i]);
+        }
+    }
+    else {
+        change_seats_state(SEAT_EMPTY, info);
+        printf("\nClient #%d:: Sorry, your payment wasn't successfull. Your booking is canceled", clientID);
+    }
+    handle_cashier(FLAG_UNLOCK);
+}
+
 void* transaction (void* clientID){
     int res, i;
     int* tid = (int*) clientID;
+    TRANSACTION_INFO info;
+    struct timespec req_start, req_end, trans_end;
+
     printf("\nClient #%d just called. \n", *tid);
 
-    TRANSACTION_INFO info;
-
-    struct timespec req_start, req_end, trans_end;
-    /*We used 0 instead of CLOCK_REALTIME since our vm wouldn't recognise this constant. The definition of the time.h library,
-    defines CLOCK_REALTIME as 0 only if a specific version of POSIX is defined. We were unable to figuer out how to do that step,
-    so we just ussed the raw value.*/
     clock_gettime(0, &req_start);
 
     handle_operator(&info, FLAG_LOCK);
 
     clock_gettime( 0, &req_end);
 
+    res = FAIL;
+
     if(available_seats == 0){
         printf("\nClient #%d:: Sorry but the theater is full...", *tid);
     }
     else{
-        info.requested_seats = request_seats(tid);
-        info.requested_zone = request_zone(tid);
-        printf("\nClient #%d:: So you want #%d seats..hmm let me check..", *tid, info.requested_seats);
-        
-        //check seats availability in theater
-        res = find_seats(&info);
-        if(res == SUCCESS){
-            printf("\nClient #%d:: We successfully found the following seats:", *tid);
-            for(i = 0; i < info.requested_seats; i++)
-            {
-                printf("\nClient #%d:: No. %d. ", *tid, info.seats[i]);
-            }
-            
-            if(info.requested_zone == ZONE_A)
-                info.cost = info.requested_seats * C_ZONE_A;
-            else if(info.requested_zone == ZONE_A)
-                info.cost = info.requested_seats * C_ZONE_B;
-            else
-                info.cost = info.requested_seats * C_ZONE_C;
-
-            printf("\nClient #%d:: I'm now transfering you to mr Varoufakis. Thank you and I hope you enjoy the play.", *tid);
-            
-        }
-        else {
-            printf("\nClient #%d:: Sorry can't proceed with your booking because theater doesn't have enough seats", *tid);
-        }
+        res = handle_seats(*tid, &info);
     }
 
     handle_operator(&info, FLAG_UNLOCK);
 
     if(res == SUCCESS){
-        handle_cashier(FLAG_LOCK);
-
-        printf("\nClient #%d:: Transaction Cost: %d", *tid, info.cost);
-        res = pay_seats(info.cost);
-        if(res == SUCCESS){
-            change_seats_state(*tid, &info);
-
-            printf("\nClient #%d:: You booked %d seats successfull! Enjoy the play!", *tid, info.requested_seats);
-            printf("\nClient #%d:: Transaction ID: %d", *tid, info.transaction_no);
-            printf("\nClient #%d:: Amount Paid: %d", *tid, info.cost);
-            for(i = 0; i < info.requested_seats; i++)
-            {
-                printf("\nClient #%d:: Booked Seat No. %d", *tid, info.seats[i]);
-            }
-        }
-        else {
-            change_seats_state(SEAT_EMPTY, &info);
-            printf("\nClient #%d:: Sorry, your payment wasn't successfull. Your booking is canceled", *tid);
-        }
-        handle_cashier(FLAG_UNLOCK);
+        cashier_transaction(*tid, &info);
     }
     
     clock_gettime( 0, &trans_end);

@@ -71,6 +71,10 @@ int pay_seats(int amount);
 
 void change_seats_state (int new_state, TRANSACTION_INFO* info);
 
+int handle_seats(int* clientID, TRANSACTION_INFO* info);
+
+void cashier_transaction(int* clientID, TRANSACTION_INFO* info);
+
 void* transaction (void* clientID);
 
 void arguments_check(int argc, char* argv[]);
