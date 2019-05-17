@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "p3140197-p3160108-p3150064-res1.h"
 
+
 int n_cust;
 unsigned int seed;
 
@@ -16,8 +17,8 @@ int sum_transactions = 0;
 int sum_transaction_time = 0;
 int sum_waiting_time = 0;
 
-int theater_seats [N_SEAT] = {0};
-int available_seats = N_SEAT;
+int theater_seats [N_SEAT * (N_ZONE_A + N_ZONE_B + N_ZONE_C)] = {0};
+int available_seats = N_SEAT * (N_ZONE_A + N_ZONE_B + N_ZONE_C);
 int a_threshold = 0;
 int b_threshold = 0;
 int c_threshold = 0;
@@ -275,7 +276,7 @@ int handle_seats(int* clientID, TRANSACTION_INFO* info) {
         printf("\nClient #%d::Done", clientID);
 
         printf("\nClient #%d:: I'm now transfering you to mr Varoufakis department.", clientID);
-        fflush(stdout);
+        //fflush(stdout);
     }
     else {
         printf("\nClient #%d:: Sorry can't proceed with your booking because theater doesn't have enough seats", clientID);
@@ -300,7 +301,7 @@ void cashier_transaction(int* clientID, TRANSACTION_INFO* info) {
     }
 
     printf("\nClient #%d:: Transaction Cost: %d", clientID, info->cost);
-    fflush(stdout);
+    //fflush(stdout);
     int res = pay_seats(info->cost);
 
     if(res == SUCCESS){
@@ -373,6 +374,7 @@ void arguments_check(int argc, char* argv[]){
 }
 
 int main (int argc, char* argv[]){
+    printf("We have %d Seats", N_SEAT * (N_ZONE_A + N_ZONE_B + N_ZONE_C));       
      
     arguments_check(argc, argv);
 
@@ -424,12 +426,19 @@ int main (int argc, char* argv[]){
     printf("\nMean waiting time: %lf seconds", mean_waiting_time);
     printf("\nMean transactions time: %lf seconds", mean_transaction_time);
     printf("\n\nSeats plan:");
-    for(int i = 0; i < N_SEAT; i++)
+    for(int i = 0; i < N_SEAT * (N_ZONE_A + N_ZONE_B + N_ZONE_C); i++)
     {
-        if(theater_seats[i] != SEAT_EMPTY)
-            printf("\n --Seat No. %d / Client %d", i + 1, theater_seats[i]);
+        if(i < N_SEAT * N_ZONE_A)
+            printf("\n --Zone A / ");
+        else if( i < N_SEAT * (N_ZONE_A + N_ZONE_B))
+            printf("\n --Zone B / ");
         else
-            printf("\n --Seat No. %d / Empty", i + 1);            
+            printf("\n --Zone C / ");
+        
+        if(theater_seats[i] != SEAT_EMPTY)
+            printf("Seat No. %d / Client %d", i + 1, theater_seats[i]);
+        else
+            printf("Seat No. %d / Empty", i + 1);            
     }
     printf("\n");
     
