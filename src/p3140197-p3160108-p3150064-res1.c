@@ -159,7 +159,7 @@ int request_zone(int* clientID){
     }
 }
 
-int find_seats (TRANSACTION_INFO* info){
+int find_seats (int* clientID, TRANSACTION_INFO* info){
     int waiting = rand_r(&seed) % (T_SEATHIGH + 1);
     if(waiting < T_SEATLOW)
         waiting = T_SEATLOW;
@@ -185,9 +185,10 @@ int find_seats (TRANSACTION_INFO* info){
 
     for (i = start; i < end - info->requested_seats + 1; i = i_in + 1)
     {
+        //printf("\nClient #%d: SO it's Zone C. Thanks!", clientID);
+        i_in = i;
         mutex_handle(&expression_of_interest, FLAG_LOCK);
         if(theater_seats[i] == SEAT_EMPTY) {
-            j = 0;
             for (i_in = i; i_in < i + info->requested_seats; i_in++)
             {
                 if(theater_seats[i_in] != SEAT_EMPTY)
@@ -211,29 +212,6 @@ int find_seats (TRANSACTION_INFO* info){
         return FAIL;
     else
         return SUCCESS;
-
-    //for (i = seats_threshold; i < N_SEAT; i ++){
-
-        /*if seat == 0 (empty), mark it as occupied*/
-        // if(theater_seats[i] == SEAT_EMPTY){
-        //     mutex_handle(&expression_of_interest, FLAG_LOCK);    
-        //     if(theater_seats[i] != 0)
-        //         continue;
-        //     theater_seats[i] = SEAT_OCCUPIED;
-        //     info->seats[j++] = i;
-        //     mutex_handle(&expression_of_interest, FLAG_UNLOCK);
-        // /*if all the previous seats are sold, we have a new threshold*/
-        // }
-        // else if(theater_seats[i] > 0){
-        //     if (new_threshold == i-1){
-        //         new_threshold = i;
-        //     }
-        // }
-        // if (j == info->requested_seats){
-        //     break;
-        // }
-    //}
-    
 }
 
 int pay_seats(int amount) {
@@ -266,7 +244,7 @@ int handle_seats(int* clientID, TRANSACTION_INFO* info) {
     printf("\nClient #%d:: So you want #%d seats..hmm let me check..", clientID, info->requested_seats);
     
     //check seats availability in theater
-    int res = find_seats(info);
+    int res = find_seats(clientID, info);
     if(res == SUCCESS){
         printf("\nClient #%d:: We successfully found the following seats:", clientID);
         for(int i = 0; i < info->requested_seats; i++)

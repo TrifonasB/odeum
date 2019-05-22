@@ -65,7 +65,7 @@ int request_seats(int* clientID);
 
 int request_zone(int* clientID);
 
-int find_seats (TRANSACTION_INFO* info);
+int find_seats (int* clientID, TRANSACTION_INFO* info);
 
 int pay_seats(int amount);
 
