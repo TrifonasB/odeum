@@ -5,10 +5,12 @@
 #include <unistd.h>
 #include "p3140197-p3160108-p3150064-res1.h"
 
-
+////////////////////////////////////////////////////////////////////////
+// Data given by the user
 int n_cust;
 unsigned int seed;
 
+// variables
 int account_remain = 0;
 int available_cashiers = N_CASH;
 int available_operators = N_TEL;
@@ -16,13 +18,18 @@ int available_operators = N_TEL;
 int sum_transactions = 0;
 int sum_transaction_time = 0;
 int sum_waiting_time = 0;
+int operator_waiting_time = 0;
+int cashier_waiting_time = 0;
 
 int theater_seats [N_SEAT * (N_ZONE_A + N_ZONE_B + N_ZONE_C)] = {0};
 int available_seats = N_SEAT * (N_ZONE_A + N_ZONE_B + N_ZONE_C);
 int a_threshold = 0;
 int b_threshold = 0;
 int c_threshold = 0;
+//////////////////////////////////////////////////////////////////////////
 
+//////////////////////////////////////////////////////////////////////////
+// mutexes and conditions
 pthread_mutex_t operators;
 pthread_mutex_t expression_of_interest;
 pthread_mutex_t payment;
@@ -30,6 +37,7 @@ pthread_mutex_t cashiers;
 
 pthread_cond_t condition_op;
 pthread_cond_t condition_cash;
+///////////////////////////////////////////////////////////////////////////
 
 void mutex_handle(pthread_mutex_t* mutex, int flag){
     int rc;
@@ -185,14 +193,15 @@ int find_seats (int* clientID, TRANSACTION_INFO* info){
 
     for (i = start; i < end - info->requested_seats + 1; i = i_in + 1)
     {
-        //printf("\nClient #%d: SO it's Zone C. Thanks!", clientID);
         i_in = i;
         mutex_handle(&expression_of_interest, FLAG_LOCK);
-        if(theater_seats[i] == SEAT_EMPTY) {
+        if((theater_seats[i] == SEAT_EMPTY) && (N_SEAT - i%N_SEAT >= info->requested_seats)) {
             for (i_in = i; i_in < i + info->requested_seats; i_in++)
             {
-                if(theater_seats[i_in] != SEAT_EMPTY)
+                if(theater_seats[i_in] != SEAT_EMPTY){
+                    while (theater_seats[i_in++] != SEAT_EMPTY){}
                     break;
+                }
                 theater_seats[i_in] = SEAT_OCCUPIED;
                 info->seats[j++] = i_in;
             }
@@ -264,9 +273,24 @@ int handle_seats(int* clientID, TRANSACTION_INFO* info) {
     return SUCCESS;
 }
 
+char print_zone (TRANSACTION_INFO* info) {
+
+    if (info->requested_zone == 0)
+        return 'A';
+    else if (info->requested_zone == 1)
+        return 'B';
+    else
+        return 'C';
+    
+}
+
 void cashier_transaction(int* clientID, TRANSACTION_INFO* info) {
 
+    struct timespec req_start, req_end;
+    clock_gettime(0, &req_start);
     handle_cashier(FLAG_LOCK);
+    clock_gettime( 0, &req_end);
+    cashier_waiting_time = req_end.tv_sec - req_start.tv_sec;
 
     if(info->requested_zone == ZONE_A){
         info->cost = info->requested_seats * C_ZONE_A;
@@ -284,8 +308,8 @@ void cashier_transaction(int* clientID, TRANSACTION_INFO* info) {
 
     if(res == SUCCESS){
         change_seats_state(clientID, info);
-
-        printf("\nClient #%d:: You booked %d seats successfull! Enjoy the play!", clientID, info->requested_seats);
+        char zone = print_zone(info);
+        printf("\nClient #%d:: You booked %d seats at zone %c successfull! Enjoy the play!", clientID, info->requested_seats, zone);
         printf("\nClient #%d:: Transaction ID: %d", clientID, info->transaction_no);
         printf("\nClient #%d:: Amount Paid: %d", clientID, info->cost);
         for(int i = 0; i < info->requested_seats; i++)
@@ -301,7 +325,7 @@ void cashier_transaction(int* clientID, TRANSACTION_INFO* info) {
 }
 
 void* transaction (void* clientID){
-    int res, i;
+    int res;
     int* tid = (int*) clientID;
     TRANSACTION_INFO info;
     struct timespec req_start, req_end, trans_end;
@@ -309,13 +333,11 @@ void* transaction (void* clientID){
     printf("\nClient #%d just called. \n", *tid);
 
     clock_gettime(0, &req_start);
-
     handle_operator(&info, FLAG_LOCK);
-
     clock_gettime( 0, &req_end);
+    operator_waiting_time = req_end.tv_sec - req_start.tv_sec;
 
     res = FAIL;
-
     if(available_seats == 0){
         printf("\nClient #%d:: Sorry but the theater is full...", *tid);
     }
@@ -325,13 +347,16 @@ void* transaction (void* clientID){
 
     handle_operator(&info, FLAG_UNLOCK);
 
+
     if(res == SUCCESS){
         cashier_transaction(*tid, &info);
     }
     
     clock_gettime( 0, &trans_end);
     //update mean values
-    sum_waiting_time += req_end.tv_sec - req_start.tv_sec;
+    sum_waiting_time += cashier_waiting_time + operator_waiting_time;
+    cashier_waiting_time = 0;
+    operator_waiting_time = 0;
     sum_transaction_time += trans_end.tv_sec - req_start.tv_sec;
 
 
@@ -367,6 +392,7 @@ int main (int argc, char* argv[]){
         return -1;
     }
 
+    ///////////////////////////////////////////////////////////
     //mutex initialization
     mutex_handle(&operators, FLAG_INIT);
     mutex_handle(&expression_of_interest, FLAG_INIT);
@@ -374,11 +400,12 @@ int main (int argc, char* argv[]){
     mutex_handle(&cashiers, FLAG_INIT);
     condition_handle(&condition_op, FLAG_INIT);
     condition_handle(&condition_cash, FLAG_INIT);
+    ///////////////////////////////////////////////////////////
 
     //thread loop
     int i;
     for (i = 0; i < n_cust; i++){
-        clientCount[i] = i + 1; 
+        clientCount[i] = i; 
         rc = pthread_create(&clients[i], NULL, transaction, &clientCount[i]);
         if (rc != 0){
             printf("E R R O R ! ! !\nThe core feels that darkness is strong in you...\nPromblem at thread creation.");

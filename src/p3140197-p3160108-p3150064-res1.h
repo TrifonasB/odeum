@@ -73,6 +73,8 @@ void change_seats_state (int new_state, TRANSACTION_INFO* info);
 
 int handle_seats(int* clientID, TRANSACTION_INFO* info);
 
+char print_zone (TRANSACTION_INFO* info);
+
 void cashier_transaction(int* clientID, TRANSACTION_INFO* info);
 
 void* transaction (void* clientID);
